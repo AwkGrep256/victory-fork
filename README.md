@@ -802,8 +802,9 @@ title's window has focus:
 Upscaler: the title uses AMD's FidelityFX upscaler (FSR) on Series S. Point
 `VICTORY_FFX_DIR` at `Kits\FidelityFX\signedbin` of AMD's public
 [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)
-(2.x) to answer its calls with the PC upscaler for D3D12 instead of the
-console's, which only has 1080p tables.
+(2.x) to use the PC upscaler for D3D12. With that variable unset, the
+Series S fallback stretches the rendered frame with a bilinear filter.
+Set `VICTORY_FFX=0` with the SDK path unset to use the original console DLL.
 
 ## Commands
 
