@@ -18,6 +18,7 @@
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::core::{Interface, PCSTR, PCWSTR};
 
@@ -75,6 +76,17 @@ struct Resource {
     state: u32,
 }
 const _: () = assert!(size_of::<Resource>() == 48);
+const FFX_RGBA16_FLOAT: u32 = 4;
+
+impl Resource {
+    fn use_host_format(&mut self, format: DXGI_FORMAT) {
+        // Some render targets are allocated as FP16 on the host even
+        // though their title descriptors still name RGB9E5.
+        if format == DXGI_FORMAT_R16G16B16A16_FLOAT {
+            self.description[1] = FFX_RGBA16_FLOAT;
+        }
+    }
+}
 
 /// `ffxDispatchDescUpscale`.
 #[repr(C)]
@@ -460,6 +472,8 @@ pub extern "C" fn ffxDispatch(context: *mut *mut c_void, desc: *const Header) ->
             );
         }
         r.resource = texture.as_raw();
+        // SAFETY: the live host texture supplied to the SDK below.
+        r.use_host_format(unsafe { texture.GetDesc() }.Format);
         r.state = ffx;
     }
     if d.resources[0].resource.is_null() || d.resources[OUTPUT].resource.is_null() {
@@ -508,6 +522,24 @@ fn missing_texture(slot: usize, title: This) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uses_the_fp16_stand_in_format_and_preserves_other_formats() {
+        use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+
+        let mut resource = Resource {
+            resource: std::ptr::null_mut(),
+            description: [2, 99, 1920, 1080, 1, 1, 0, 2],
+            state: FFX_UNORDERED_ACCESS,
+        };
+        let original = resource.description;
+        resource.use_host_format(DXGI_FORMAT_R9G9B9E5_SHAREDEXP);
+        assert_eq!(resource.description, original);
+
+        resource.use_host_format(DXGI_FORMAT_R16G16B16A16_FLOAT);
+        assert_eq!(resource.description, [2, FFX_RGBA16_FLOAT, 1920, 1080, 1, 1, 0, 2]);
+        assert_eq!(resource.state, FFX_UNORDERED_ACCESS);
+    }
 
     #[test]
     fn create_takes_the_upscale_description_only_beside_the_console_backend() {

@@ -229,13 +229,12 @@ impl Output {
         // SAFETY: a live texture. The field order is ffxApiGetResourceDX12's.
         let desc = unsafe { self.float.GetDesc() };
         const FFX_TEXTURE_2D: u32 = 2;
-        const FFX_RGBA16_FLOAT: u32 = 4;
         const FFX_USAGE_UAV: u32 = 1 << 1;
         Resource {
             resource: self.float.as_raw(),
             description: [
                 FFX_TEXTURE_2D,
-                FFX_RGBA16_FLOAT,
+                super::FFX_RGBA16_FLOAT,
                 desc.Width as u32,
                 desc.Height,
                 desc.DepthOrArraySize.into(),
