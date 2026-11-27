@@ -28,7 +28,7 @@ developer or publisher.
   are carried here unchanged apart from one merge conflict.
 - This fork's changes were developed with [Claude Code](https://claude.com/claude-code).
 
-## Status of this fork (2026-11-27, 01:20 UTC)
+## Status of this fork (2026-11-27, 03:45 UTC)
 
 **Playable, slowly: about 11 world frames per second at the first boat mission at 1,500 to 3,300
 draws (usual frame 88 ms), 8.5 at 3,300 and more (115 to 120 ms); the console runs 30. The card is no
@@ -52,7 +52,23 @@ Tested on one machine: Windows 11, Intel i7-14700KF, NVIDIA RTX 4070 12 GB,
 | Stability | **the card is lost after 30 to 50 minutes of play**: Windows reports the device removed (0x887A0005) with no driver event and no freeze, twice (runs 277 and 279); once a hang after 6 minutes with two driver events (run 276). Cause not known. In the tree to find it: crash tracing cheap enough to leave on (`VICTORY_D3D12_DRED=faults`), the memory at the moment of a loss, and a cap on oversized constant views (an invalid call another tester's card answered with a removal) |
 | Memory | about 23 to 27 GB of the PC's 32 GB and 9.2 to 9.6 GB of the card's 10.3 GB budget while playing |
 
-### Newest (2026-11-27, 01:20 UTC)
+### Newest (2026-11-27, 03:45 UTC)
+
+- **The ray-tracing structure builder runs** (`VICTORY_BVH_BUILDER`, now on by default; `=0` turns it
+  off): its last three programs, the group prefix sums, translate (a shared-memory read at a uniform
+  address counts as lane-uniform, after PR #36). **Known problem: about 30-40 s after the builder
+  starts, the title crashes on a write to address 0 (two runs, with and without
+  `VICTORY_BVH_QUARANTINE`).** Until that is traced, set `VICTORY_BVH_BUILDER=0` to play.
+- **Water:** the two water programs run in the paired wave64 form (pull request #1419 plus exact
+  reductions here; set `VICTORY_WAVE_PAIRS_ONLY=5dc3b25986622949,6f225b641c5b0708`,
+  `VICTORY_WAVE_PAIRS_FP32=non-ieee-rne-ftz`): the water has its green colour. The tile start values the
+  corner thread skips on an early return are now set by every thread first (`VICTORY_LDS_INIT_HOIST=0`
+  off), for the flickering dark tiles; not yet confirmed in a game run.
+- **New, off by default:** `VICTORY_GPU_DETILE` (textures detiled on the card), `VICTORY_INPLACE_CONSTANTS`
+  (the title's constants heap read by the card in place; did not open in its first run),
+  `VICTORY_PATCH_LEAN`, `VICTORY_DUMP_REFUSED=<dir>` (saves shaders that do not translate).
+
+### Earlier (2026-11-27, 01:20 UTC)
 
 - **The flights are no longer settled for title bytes changed under shader writes
   (`VICTORY_MASKED_PATCH`, on by default):** a page with more changed runs than the merge's cap goes
