@@ -547,7 +547,10 @@ fn lane_uniform(p: &Program, st: &Structured, all: &[bool]) -> HashSet<Value> {
         }
         for (i, inst) in block.insts.iter().enumerate() {
             let name = inst.name();
-            let ops: Vec<Operand> = match &inst.fields {
+            if st.guards[b][i].is_some() {
+                continue; // lanes outside EXEC keep another value
+            }
+            let alike = match &inst.fields {
                 Fields::Valu(v)
                     if v.dpp.is_none()
                         && v.sdwa.is_none()
@@ -555,26 +558,44 @@ fn lane_uniform(p: &Program, st: &Structured, all: &[bool]) -> HashSet<Value> {
                         && !name.starts_with("v_cmpx")
                         && !name.contains("lane") =>
                 {
-                    v.src.clone()
+                    v.src.iter().all(|op| match *op {
+                        Operand::Vector { reg, dwords } => {
+                            // every dword of the operand the instruction reads (not the old value
+                            // of a higher-numbered destination register that IR keeps for guards)
+                            // A relative move reads the register `M0` past this one, and a
+                            // swap or a relative store keeps or moves old values: for those
+                            // every register read from this one on counts, as before.
+                            let whole = name.starts_with("v_movrel") || name.starts_with("v_swap");
+                            let end = reg.saturating_add(dwords);
+                            let read: Vec<Value> = inst
+                                .reads
+                                .iter()
+                                .filter(|r| matches!(r.0, Reg::V(x) if x >= reg && (whole || x < end)))
+                                .map(|r| r.1)
+                                .collect();
+                            !read.is_empty() && read.iter().all(|x| same.contains(x))
+                        }
+                        // a scalar is one value; a lane mask is not, unless a compare of such values made it
+                        Operand::Scalar { code, dwords } if code != NULL => {
+                            (code..code.saturating_add(dwords)).all(|c| {
+                                inst.read(Reg::S(c)).is_none_or(|x| !is_mask(x) || same.contains(&x))
+                            })
+                        }
+                        _ => true,
+                    })
                 }
-                _ => continue,
+                Fields::Ds {
+                    addr: Some(Operand::Vector { reg, .. }),
+                    gds: false,
+                    ..
+                } if name.starts_with("ds_read") && !name.contains("_d16") => {
+                    // An unguarded LDS read from a wave-uniform address gives the same value
+                    // in every arriving lane. `_d16` forms preserve the other half of the
+                    // destination register and are left out.
+                    inst.read(Reg::V(*reg)).is_some_and(|x| same.contains(&x))
+                }
+                _ => false,
             };
-            if st.guards[b][i].is_some() {
-                continue; // lanes outside EXEC keep another value
-            }
-            let alike = ops.iter().all(|op| match *op {
-                Operand::Vector { reg, .. } => {
-                    // every dword of the operand the instruction reads from that register on
-                    let read: Vec<Value> =
-                        inst.reads.iter().filter(|r| matches!(r.0, Reg::V(x) if x >= reg)).map(|r| r.1).collect();
-                    !read.is_empty() && read.iter().all(|x| same.contains(x))
-                }
-                // a scalar is one value; a lane mask is not, unless a compare of such values made it
-                Operand::Scalar { code, .. } if code != NULL => {
-                    inst.read(Reg::S(code)).is_none_or(|x| !is_mask(x) || same.contains(&x))
-                }
-                _ => true,
-            });
             if alike {
                 same.extend(inst.writes.iter().filter(|w| w.0 != Reg::Scc).map(|w| w.1));
             }
